@@ -15,11 +15,21 @@ class CoffeeShopParser
     return [] if @csv_data.nil? || @csv_data.strip.empty?
 
     coffee_shops = []
+    lines = @csv_data.lines.map(&:strip).reject(&:empty?)
+    return [] if lines.empty?
 
-    CSV.parse(@csv_data, headers: true) do |row|
-      next unless valid_row?(row)
+    # Detect if first line is a header
+    has_headers = header_line?(lines.first)
+    start_index = has_headers ? 1 : 0
 
-      coffee_shops << build_coffee_shop(row)
+    # Parse each data line
+    lines[start_index..-1]&.each do |line|
+      next if line.empty?
+
+      fields = CSV.parse_line(line)
+      next unless valid_fields?(fields)
+
+      coffee_shops << build_coffee_shop_from_fields(fields)
     rescue ArgumentError, TypeError => e
       Rails.logger.warn("Skipping malformed CSV row: #{e.message}")
       next
@@ -30,11 +40,22 @@ class CoffeeShopParser
 
   private
 
-  def valid_row?(row)
-    return false if row.nil?
-    return false if row["Name"].nil? || row["Name"].to_s.strip.empty?
-    return false if row["X"].nil? || row["Y"].nil?
-    return false unless numeric?(row["X"]) && numeric?(row["Y"])
+  def header_line?(line)
+    return false if line.nil? || line.empty?
+
+    # Check if line matches "Name,X,Y" pattern (case-insensitive)
+    fields = CSV.parse_line(line)
+    return false if fields.length < 3
+
+    fields[0].to_s.strip.downcase == "name" &&
+      fields[1].to_s.strip.downcase == "x" &&
+      fields[2].to_s.strip.downcase == "y"
+  end
+
+  def valid_fields?(fields)
+    return false if fields.nil? || fields.length < 3
+    return false if fields[0].nil? || fields[0].to_s.strip.empty?
+    return false unless numeric?(fields[1]) && numeric?(fields[2])
 
     true
   end
@@ -48,11 +69,11 @@ class CoffeeShopParser
     false
   end
 
-  def build_coffee_shop(row)
+  def build_coffee_shop_from_fields(fields)
     CoffeeShop.new(
-      name: row["Name"].to_s.strip,
-      x: row["X"].to_s.strip,
-      y: row["Y"].to_s.strip
+      name: fields[0].to_s.strip,
+      x: fields[1].to_s.strip,
+      y: fields[2].to_s.strip
     )
   end
 end

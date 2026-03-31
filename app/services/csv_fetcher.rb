@@ -18,7 +18,9 @@ class CsvFetcher
   end
 
   def call
-    fetch_with_redirects(@url, MAX_REDIRECTS)
+    Rails.cache.fetch(cache_key, expires_in: 1.hour) do
+      fetch_with_redirects(@url, MAX_REDIRECTS)
+    end
   rescue SocketError, Errno::ECONNREFUSED => e
     raise FetchError, "Network error: #{e.message}"
   rescue Net::OpenTimeout, Net::ReadTimeout => e
@@ -26,6 +28,10 @@ class CsvFetcher
   end
 
   private
+
+  def cache_key
+    "csv_fetcher/#{Digest::MD5.hexdigest(@url)}"
+  end
 
   def fetch_with_redirects(url, redirects_remaining)
     uri = URI.parse(url)
